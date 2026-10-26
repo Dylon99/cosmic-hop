@@ -2,6 +2,7 @@ import { LEVELS } from '../levels.js';
 import { TILE, TILE_INDEX } from '../assets/sprites.js';
 import { sfx } from '../assets/sounds.js';
 import { text, addBackdrop, updateBackdrop } from '../ui.js';
+import { fitGame, onViewChange } from '../view.js';
 import Player from '../entities/Player.js';
 import { Blob, Crawler, Drone } from '../entities/enemies.js';
 
@@ -67,20 +68,23 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.pickups, this.collect, null, this);
 
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, this.worldW, this.worldH);
+    fitGame(this, this.worldW);
+    onViewChange(this, () => {
+      fitGame(this, this.worldW);
+      updateBackdrop(this.backdrop, cam);
+    });
     cam.startFollow(this.player, true, 0.15, 0.15);
     cam.setDeadzone(120, 200);
     cam.fadeIn(400);
+    // move the backdrop once the camera has its final position for the frame
+    cam.on('followupdate', () => updateBackdrop(this.backdrop, cam));
+    updateBackdrop(this.backdrop, cam);
 
     this.registry.set({
       level: level + 1, levelName: L.name, time: Math.ceil(this.timeLeft),
       stars: 0, starsTotal: stars, crystals: 0, crystalsTotal: crystals,
     });
     this.scene.launch('HUD');
-
-    const banner = text(this, 480, 230, `LEVEL ${level + 1}\n${L.name}`, 28, '#ffd23f')
-      .setScrollFactor(0).setDepth(50).setLineSpacing(16);
-    this.tweens.add({ targets: banner, alpha: 0, delay: 1600, duration: 600, onComplete: () => banner.destroy() });
   }
 
   buildTilemap(rows) {
@@ -256,7 +260,6 @@ export default class GameScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    updateBackdrop(this.backdrop, this.cameras.main.scrollX);
     if (this.finished) return;
     this.player.update(time, delta);
     if (this.player.dead) return;

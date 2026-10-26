@@ -15,6 +15,10 @@ Then open http://localhost:8000. Add `?level=2` or `?level=3` to the URL to jump
 
 **Controls:** Arrows/WASD to move, Space/Up/W to jump (hold for higher), P to pause, M to mute.
 
+**On phones:** hold the phone in landscape. Use the ◀ ▶ buttons on the left to move, and tap anywhere on the right half of the screen to jump (hold for higher). Pause and mute buttons are in the top-right corner. Adding the page to your home screen runs it full screen with no browser bars.
+
+The game always fills the window. Wider screens show more of the level, and the canvas renders at the screen's real resolution so pixels and text stay sharp.
+
 ## Scoring
 
 | | Points |

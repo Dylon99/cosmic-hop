@@ -1,4 +1,5 @@
 import { sfx } from '../assets/sounds.js';
+import { touch } from '../input.js';
 
 const RUN_SPEED = 300;
 const JUMP_VELOCITY = -760;
@@ -33,9 +34,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     const body = this.body;
     const onGround = body.blocked.down;
 
-    const dir = (k.RIGHT.isDown || k.D.isDown ? 1 : 0) - (k.LEFT.isDown || k.A.isDown ? 1 : 0);
-    const jumpDown = k.UP.isDown || k.W.isDown || k.SPACE.isDown;
-    const jumpPressed = [k.UP, k.W, k.SPACE].some((key) => Phaser.Input.Keyboard.JustDown(key));
+    const dir = (k.RIGHT.isDown || k.D.isDown || touch.right ? 1 : 0) - (k.LEFT.isDown || k.A.isDown || touch.left ? 1 : 0);
+    const jumpDown = this.jumpHeldDown();
+    const touchJumpPressed = touch.jump && !this.prevTouchJump;
+    this.prevTouchJump = touch.jump;
+    const jumpPressed = [k.UP, k.W, k.SPACE].map((key) => Phaser.Input.Keyboard.JustDown(key)).some(Boolean) || touchJumpPressed;
 
     // horizontal: accelerate towards target speed, slide to a stop
     let vx = body.velocity.x;
@@ -82,8 +85,12 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  jumpHeldDown() {
+    return this.keys.UP.isDown || this.keys.W.isDown || this.keys.SPACE.isDown || touch.jump;
+  }
+
   bounce() {
-    const held = this.keys.UP.isDown || this.keys.W.isDown || this.keys.SPACE.isDown;
+    const held = this.jumpHeldDown();
     this.body.setVelocityY(held ? JUMP_VELOCITY : STOMP_BOUNCE);
     this.jumpHeld = held;
   }

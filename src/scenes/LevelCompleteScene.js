@@ -1,6 +1,8 @@
 import { LEVELS } from '../levels.js';
-import { text, addBackdrop, saveHighScore, pressToContinue } from '../ui.js';
+import { text, addBackdrop, updateBackdrop, saveHighScore, pressToContinue } from '../ui.js';
 import { sfx } from '../assets/sounds.js';
+import { DESIGN_W, fitUI, onViewChange } from '../view.js';
+import { isTouchDevice } from '../input.js';
 
 export default class LevelCompleteScene extends Phaser.Scene {
   constructor() {
@@ -8,9 +10,15 @@ export default class LevelCompleteScene extends Phaser.Scene {
   }
 
   create({ level, breakdown }) {
-    const w = this.scale.width;
+    const w = DESIGN_W;
     const last = level === LEVELS.length - 1;
-    addBackdrop(this, level);
+    const backdrop = addBackdrop(this, level);
+    const fit = () => {
+      fitUI(this);
+      updateBackdrop(backdrop, this.cameras.main, 0);
+    };
+    fit();
+    onViewChange(this, fit);
     this.cameras.main.fadeIn(300);
 
     text(this, w / 2, 90, last ? 'MISSION COMPLETE!' : 'LEVEL CLEAR!', 40, '#ffd23f').setStroke('#7a2a00', 8);
@@ -36,7 +44,8 @@ export default class LevelCompleteScene extends Phaser.Scene {
     const isRecord = last && saveHighScore(this.registry.get('score'));
     this.time.delayedCall(250 + lines.length * 220 + 300, () => {
       if (isRecord) text(this, w / 2, 490, 'NEW HIGH SCORE!', 18, '#ffd23f');
-      const prompt = text(this, w / 2, 530, last ? 'PRESS SPACE FOR MENU' : 'PRESS SPACE FOR NEXT LEVEL', 16, '#41e0ff');
+      const action = isTouchDevice ? 'TAP' : 'PRESS SPACE';
+      const prompt = text(this, w / 2, 530, `${action} FOR ${last ? 'MENU' : 'NEXT LEVEL'}`, 16, '#41e0ff');
       this.tweens.add({ targets: prompt, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
       pressToContinue(this, ['SPACE', 'ENTER'], () => {
         sfx.select();

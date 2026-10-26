@@ -323,6 +323,33 @@ const beaconGrid = (X, x) => [
 ];
 const beacon = [beaconGrid('g', 'w'), beaconGrid('N', 'M')];
 
+// ---------------------------------------------------------------- touch buttons
+const glyphs = {
+  left: ['.....W..', '....WW..', '...WWW..', '..WWWW..', '..WWWW..', '...WWW..', '....WW..', '.....W..'],
+  right: ['..W.....', '..WW....', '..WWW...', '..WWWW..', '..WWWW..', '..WWW...', '..WW....', '..W.....'],
+  jump: ['........', '...WW...', '..WWWW..', '.WWWWWW.', 'WWWWWWWW', '..WWWW..', '..WWWW..', '..WWWW..'],
+  pause: ['........', '.WW..WW.', '.WW..WW.', '.WW..WW.', '.WW..WW.', '.WW..WW.', '.WW..WW.', '........'],
+  sound: ['........', '...W..W.', '..WW...W', 'WWWW.W.W', 'WWWW.W.W', '..WW...W', '...W..W.', '........'],
+  muted: ['........', '...W....', '..WW.W.W', 'WWWW..W.', 'WWWW.W.W', '..WW....', '...W....', '........'],
+};
+
+// Round button: outline, fill, and the glyph scaled up `g` times in the middle.
+function buttonGrid(glyph, size, g, fill) {
+  const c = (size - 1) / 2, off = (size - 8 * g) / 2;
+  return Array.from({ length: size }, (_, y) => {
+    let row = '';
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x - c, y - c);
+      const gx = Math.floor((x - off) / g), gy = Math.floor((y - off) / g);
+      const inGlyph = gx >= 0 && gx < 8 && gy >= 0 && gy < 8 && glyph[gy][gx] === 'W';
+      row += d > c + 0.5 ? '.' : d > c - 1 ? 'K' : inGlyph ? 'W' : d > c - 2 ? 'w' : fill;
+    }
+    return row;
+  });
+}
+const bigButton = (name) => [buttonGrid(glyphs[name], 24, 2, 'G'), buttonGrid(glyphs[name], 24, 2, 'c')];
+const smallButton = (name) => [buttonGrid(glyphs[name], 12, 1, 'G'), buttonGrid(glyphs[name], 12, 1, 'c')];
+
 // ---------------------------------------------------------------- builders
 function drawGrid(ctx, grid, ox, oy, s) {
   grid.forEach((row, y) => {
@@ -441,6 +468,8 @@ export function buildTextures(scene, levels) {
   addSheet(scene, 'heart-icon', heart, 2);
   addSheet(scene, 'star-icon', star, 2);
   addSheet(scene, 'crystal-icon', crystal, 2);
+  ['left', 'right', 'jump'].forEach((n) => addSheet(scene, `btn-${n}`, bigButton(n), 4));
+  ['pause', 'sound', 'muted'].forEach((n) => addSheet(scene, `btn-${n}`, smallButton(n), 3));
 
   const spark = scene.textures.createCanvas('spark', 6, 6);
   spark.getContext().fillStyle = '#ffffff';
