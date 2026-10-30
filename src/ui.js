@@ -1,4 +1,5 @@
-import { visibleRect, textResolution } from './view.js';
+import { DESIGN_H, visibleRect, textResolution } from './view.js';
+import { isTouchDevice } from './input.js';
 
 export const FONT = '"Press Start 2P", monospace';
 
@@ -43,14 +44,16 @@ export function saveHighScore(score) {
   return true;
 }
 
-// Sky gradient, two parallax star layers and a planet. They live in world
-// space and updateBackdrop() keeps them covering whatever the camera shows.
+// Sky gradient, two parallax star layers, a planet and distant hills. They
+// live in world space and updateBackdrop() keeps them covering whatever the
+// camera shows.
 export function addBackdrop(scene, level) {
   return {
     sky: scene.add.image(0, 0, `sky-${level}`).setOrigin(0).setDepth(-10),
     far: scene.add.tileSprite(0, 0, 16, 16, 'stars-far').setOrigin(0).setDepth(-9),
     planet: scene.add.image(0, 0, `planet-${level}`).setScale(3).setDepth(-8),
     near: scene.add.tileSprite(0, 0, 16, 16, 'stars-near').setOrigin(0).setDepth(-7),
+    hills: scene.add.tileSprite(0, 0, 16, 16, `hills-${level}`).setOrigin(0).setDepth(-6),
   };
 }
 
@@ -65,6 +68,11 @@ export function updateBackdrop(backdrop, cam, scroll = cam.scrollX) {
     layer.tilePositionX = scroll * speed;
   }
   backdrop.planet.setPosition(r.x + r.width * 0.72 - scroll * 0.04, r.y + r.height * 0.28);
+  // the hills sit on the bottom of the level, or of the screen in menus
+  const { hills } = backdrop;
+  if (hills.width !== w) hills.setSize(w, DESIGN_H);
+  hills.setPosition(x, Math.max(DESIGN_H, y + h) - DESIGN_H);
+  hills.tilePositionX = scroll * 0.35;
 }
 
 export function pressToContinue(scene, keys, cb, tap = true) {
@@ -75,5 +83,20 @@ export function pressToContinue(scene, keys, cb, tap = true) {
     cb();
   };
   keys.forEach((k) => scene.input.keyboard.once(`keydown-${k}`, go));
-  if (tap) scene.input.once('pointerdown', go);
+  // taps on buttons don't count
+  if (tap) scene.input.on('pointerdown', (pointer, over) => over.length || go());
+}
+
+// Starts a new game (score 0, 3 lives) at the given level.
+export function startRun(scene, level) {
+  // hide the browser bars on phones that allow it (not iPhone Safari)
+  if (isTouchDevice && scene.scale.fullscreen.available && !scene.scale.isFullscreen) {
+    try {
+      scene.scale.startFullscreen();
+    } catch {
+      // not allowed here - play in the normal browser view
+    }
+  }
+  scene.registry.set({ score: 0, lives: 3 });
+  scene.scene.start('Game', { level });
 }

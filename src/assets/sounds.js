@@ -4,7 +4,7 @@ let ctx = null;
 let master = null;
 let muted = false;
 
-function audio() {
+export function audio() {
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return null;
@@ -13,9 +13,21 @@ function audio() {
     master.gain.value = 0.5;
     master.connect(ctx.destination);
   }
-  if (ctx.state === 'suspended') ctx.resume();
+  if (ctx.state === 'suspended' && !document.hidden) ctx.resume();
   return ctx;
 }
+
+// Everything (music included) goes through this node; muting silences it.
+export const output = () => (audio() ? master : null);
+
+// Browsers only allow sound after the player interacts with the page, and
+// it should stop while the tab is hidden.
+['pointerdown', 'keydown'].forEach((type) => window.addEventListener(type, () => audio(), { passive: true }));
+document.addEventListener('visibilitychange', () => {
+  if (!ctx) return;
+  if (document.hidden) ctx.suspend();
+  else ctx.resume();
+});
 
 function tone({ freq, to = freq, dur = 0.15, type = 'square', vol = 0.12, delay = 0 }) {
   const ac = audio();
@@ -70,10 +82,19 @@ export const sfx = {
   complete: () => notes([523, 659, 784, 1047, 784, 1047], 0.11, { dur: 0.16, vol: 0.08 }),
   gameOver: () => notes([392, 330, 262, 196], 0.22, { dur: 0.3, type: 'triangle', vol: 0.18 }),
   select: () => tone({ freq: 660, to: 880, dur: 0.08, vol: 0.06 }),
+  powerUp: () => notes([523, 659, 784, 1047, 1319, 1568], 0.05, { dur: 0.14, type: 'triangle', vol: 0.14 }),
+  powerDown: () => notes([784, 523, 392], 0.08, { dur: 0.14, type: 'triangle', vol: 0.1 }),
+  spit: () => tone({ freq: 520, to: 160, dur: 0.16, type: 'sawtooth', vol: 0.05 }),
+  airJump: () => tone({ freq: 380, to: 1150, dur: 0.16, type: 'triangle', vol: 0.14 }),
+  shieldBreak: () => {
+    noise({ dur: 0.3, vol: 0.22, from: 5000, to: 400 });
+    tone({ freq: 1000, to: 180, dur: 0.3, type: 'triangle', vol: 0.12 });
+  },
 };
 
 export function toggleMute() {
   muted = !muted;
+  if (master) master.gain.setTargetAtTime(muted ? 0 : 0.5, ctx.currentTime, 0.02);
   return muted;
 }
 

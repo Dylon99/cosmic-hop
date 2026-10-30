@@ -4,6 +4,7 @@ import GameScene from './scenes/GameScene.js';
 import HUDScene from './scenes/HUDScene.js';
 import LevelCompleteScene from './scenes/LevelCompleteScene.js';
 import GameOverScene from './scenes/GameOverScene.js';
+import LevelSelectScene from './scenes/LevelSelectScene.js';
 import { isTouchDevice } from './input.js';
 
 // Wait for the pixel font so the first text isn't drawn in a fallback font.
@@ -37,7 +38,7 @@ const game = new Phaser.Game({
     arcade: { gravity: { y: 1600 }, tileBias: 32, debug: false },
   },
   scale: { mode: Phaser.Scale.NONE, zoom: 1 / pixelRatio() },
-  scene: [BootScene, MenuScene, GameScene, HUDScene, LevelCompleteScene, GameOverScene],
+  scene: [BootScene, MenuScene, LevelSelectScene, GameScene, HUDScene, LevelCompleteScene, GameOverScene],
 });
 window.game = game;
 
