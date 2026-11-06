@@ -17,8 +17,9 @@ Then open http://localhost:8000. To pick any level, press **L** (or tap **LEVELS
 
 **Two players:** on the title screen, press **1** or **2** (or click the **1 PLAYER / 2 PLAYERS** button) to pick the number of players; the choice is remembered, and `?players=2` in the URL does the same. Player 1 (white suit) uses **WASD** with **W** or **Space** to jump and **S** to drop; player 2 (green suit) uses the **arrow keys** with **Up** to jump and **Down** to drop. It's co-op on one screen:
 
-- The camera follows the middle of the two, and neither player can leave the screen, so whoever is ahead has to wait for the other.
-- You share the score, the star and crystal counts and one pool of 6 hearts. Every death costs a heart; running out is game over for both.
+- The camera follows the middle of the two and always keeps both on screen. You can get up to a screen width apart; then whoever is ahead has to wait for the other.
+- You share the team score (which counts for the high score), the star and crystal counts and one pool of 6 hearts. Every death costs a heart; running out is game over for both.
+- Each player also has their own score, shown under the top bar: the stars, crystals and stomps they got themselves, plus the 500 level bonus for whoever reaches the rocket first. The level-complete and game-over screens say who's ahead (or who won).
 - A player who dies comes back next to their partner as soon as the partner is standing on something. If both are down, both restart at the last checkpoint.
 - Super powers belong to whoever grabbed them (player 2's show on the right under the top bar). Either player reaching the rocket finishes the level.
 

@@ -33,9 +33,15 @@ const game = new Phaser.Game({
   roundPixels: true,
   backgroundColor: '#0b0d1e',
   input: { activePointers: 4 },
+  // frames longer than 1/30 s count as 1/30 s, so a hitch slows the game
+  // down for a moment instead of letting anything fall through the floor
+  fps: { min: 30 },
   physics: {
     default: 'arcade',
-    arcade: { gravity: { y: 1600 }, tileBias: 32, debug: false },
+    // one physics step per rendered frame, using that frame's time. The
+    // default fixed 60 Hz step drifts against the display's refresh, so on
+    // a 60 Hz screen some frames got no step and the next got two (stutter).
+    arcade: { gravity: { y: 1600 }, tileBias: 32, fixedStep: false, debug: false },
   },
   scale: { mode: Phaser.Scale.NONE, zoom: 1 / pixelRatio() },
   scene: [BootScene, MenuScene, LevelSelectScene, GameScene, HUDScene, LevelCompleteScene, GameOverScene],

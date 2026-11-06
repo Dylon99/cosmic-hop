@@ -1,4 +1,4 @@
-import { FONT, text, button } from '../ui.js';
+import { FONT, text, button, PLAYER_COLORS } from '../ui.js';
 import { toggleMute, isMuted } from '../assets/sounds.js';
 import { music } from '../assets/music.js';
 import { fitOverlay, onViewChange, safeInsets, textResolution } from '../view.js';
@@ -29,6 +29,8 @@ export default class HUDScene extends Phaser.Scene {
     this.crystalIcon = this.add.image(0, BAR_H / 2, 'crystal-icon');
     this.crystals = label('#41e0ff');
     this.timer = label('#ffffff');
+    // two players: each one's own score under the bar, P1 left and P2 right
+    this.playerScores = this.twoPlayer ? PLAYER_COLORS.map((color) => label(color).setFontSize(12)) : [];
 
     const iconButton = (key, onPress) => this.add.image(0, BAR_H / 2, key, 0)
       .setInteractive({ useHandCursor: true })
@@ -110,6 +112,8 @@ export default class HUDScene extends Phaser.Scene {
 
     // top bar: lives and score on the left, everything else flows in from the right
     this.hearts.forEach((heart, i) => heart.setPosition(left + 12 + i * HEART_GAP, BAR_H / 2));
+    this.playerScores[0]?.setPosition(left, BAR_H + 16);
+    this.playerScores[1]?.setOrigin(1, 0.5).setPosition(right, BAR_H + 16);
     this.score.setX(left + this.hearts.length * HEART_GAP + 16);
     // narrow screens: shrink the bar text, then drop the "SCORE" label
     for (const compact of [0, 1, 2]) {
@@ -152,10 +156,15 @@ export default class HUDScene extends Phaser.Scene {
   refresh(r) {
     const v = {
       score: r.get('score'), lives: r.get('lives'), time: r.get('time'), muted: isMuted(),
+      score1: r.get('score1'), score2: r.get('score2'),
       stars: `${r.get('stars')}/${r.get('starsTotal')}`, crystals: `${r.get('crystals')}/${r.get('crystalsTotal')}`,
     };
     const changed = (k) => v[k] !== this.last[k];
     if (changed('score')) this.score.setText(this.scoreText(v.score));
+    this.playerScores.forEach((t, i) => {
+      const key = `score${i + 1}`;
+      if (changed(key)) t.setText(`P${i + 1} ${String(v[key]).padStart(6, '0')}`);
+    });
     if (changed('stars')) this.stars.setText(v.stars);
     if (changed('crystals')) this.crystals.setText(v.crystals);
     if (changed('time')) this.timer.setText(`TIME ${v.time}`).setColor(v.time <= 20 ? '#e43b44' : '#ffffff');
@@ -172,7 +181,8 @@ export default class HUDScene extends Phaser.Scene {
       const icons = this.powerIcons[p];
       Object.values(icons).forEach((icon) => icon.setVisible(false));
       powers.forEach(([name, left], i) => {
-        const x = p === 0 ? this.left + 20 + i * 44 : this.right - 20 - i * 44, y = BAR_H + 24;
+        const x = p === 0 ? this.left + 20 + i * 44 : this.right - 20 - i * 44;
+        const y = BAR_H + (this.twoPlayer ? 52 : 24); // below the player scores
         // blink for the last couple of seconds
         const { time: total } = POWERS[name];
         const ending = total && left * total < 2 && Math.floor(time / 120) % 2;

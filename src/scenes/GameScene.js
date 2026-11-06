@@ -2,7 +2,7 @@ import { LEVELS } from '../levels.js';
 import { TILE, TILE_INDEX, groundTiles } from '../assets/sprites.js';
 import { sfx } from '../assets/sounds.js';
 import { music } from '../assets/music.js';
-import { text, addBackdrop, updateBackdrop } from '../ui.js';
+import { text, addBackdrop, updateBackdrop, PLAYER_COLORS } from '../ui.js';
 import { fitGame, onViewChange, visibleRect } from '../view.js';
 import { CONTROLS } from '../input.js';
 import Player from '../entities/Player.js';
@@ -16,7 +16,7 @@ const MAGNET_RANGE = 260;
 const MOVER_SPEED = 100; // px per second
 const RESPAWN_DELAY = 1.3; // seconds
 const EDGE_MARGIN = 16; // two players: how close to the screen edge either can go
-const TAG_COLORS = ['#ffd23f', '#b8ff9a'];
+const CAMERA_CATCHUP = 9.75; // per second; the same as easing 15% of the way each frame at 60 fps
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -110,10 +110,7 @@ export default class GameScene extends Phaser.Scene {
       updateBackdrop(this.backdrop, cam);
     });
     if (this.twoPlayer) {
-      // follow the middle of the two; no deadzone so the screen stays centred
-      // between them and neither gets pushed by the edge while the other runs
-      this.camTarget = { x: start.x, y: start.y };
-      cam.startFollow(this.camTarget, true, 0.15, 0.15);
+      // placed by hand every frame in updateCoop()
       cam.centerOn(start.x, start.y);
     } else {
       cam.startFollow(this.players[0], true, 0.15, 0.15);
@@ -132,6 +129,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   setupPlayer(player, i) {
+    player.index = i;
     player.shadow = this.add.image(player.x, player.y, 'shadow').setDepth(1);
     // floating platforms stop holding the player up for a moment after they press down
     player.layerCollider = this.physics.add.collider(player, this.layer, null,
@@ -145,7 +143,7 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.overlap(player, this.pickups, this.collect, null, this);
     if (this.twoPlayer) {
       player.body.setBoundsRectangle(this.playerBounds);
-      player.tag = text(this, player.x, player.y, `P${i + 1}`, 10, TAG_COLORS[i]).setDepth(12);
+      player.tag = text(this, player.x, player.y, `P${i + 1}`, 10, PLAYER_COLORS[i]).setDepth(12);
     }
   }
 
@@ -157,25 +155,40 @@ export default class GameScene extends Phaser.Scene {
     return alive.reduce((a, b) => (Phaser.Math.Distance.Between(x, y, a.x, a.y) <= Phaser.Math.Distance.Between(x, y, b.x, b.y) ? a : b));
   }
 
-  // Two players: aim the camera between the living players and keep both
-  // inside the visible part of the level.
-  updateCoop() {
+  // Two players. The camera eases towards the point between the living
+  // players but is hard-clamped so it always shows both: someone running
+  // towards an edge moves the screen right away instead of nudging it.
+  // How far apart the two can get depends only on where they are (never
+  // more than a screen width), so the screen never gets dragged along.
+  updateCoop(dt) {
+    const cam = this.cameras.main;
+    const view = visibleRect(cam);
+    const half = view.width / 2;
     const alive = this.players.filter((p) => !p.dead);
+    const left = Math.min(...alive.map((p) => p.body.left));
+    const right = Math.max(...alive.map((p) => p.body.right));
+
     if (alive.length) {
-      this.camTarget.x = alive.reduce((sum, p) => sum + p.x, 0) / alive.length;
-      this.camTarget.y = alive.reduce((sum, p) => sum + p.y, 0) / alive.length;
+      const ease = 1 - Math.exp(-CAMERA_CATCHUP * dt);
+      let x = view.centerX + ((left + right) / 2 - view.centerX) * ease;
+      x = Phaser.Math.Clamp(x, right + EDGE_MARGIN - half, left - EDGE_MARGIN + half);
+      const bounds = cam.getBounds();
+      x = bounds.width <= view.width ? bounds.centerX : Phaser.Math.Clamp(x, bounds.x + half, bounds.right - half);
+      cam.centerOnX(x);
+      updateBackdrop(this.backdrop, cam);
     }
-    this.updatePlayerBounds();
+
+    const span = view.width - 2 * EDGE_MARGIN;
+    if (alive.length > 1) {
+      const minX = Math.max(0, right - span);
+      this.playerBounds.setTo(minX, 0, Math.min(this.worldW, left + span) - minX, this.worldH);
+    } else {
+      this.playerBounds.setTo(0, 0, this.worldW, this.worldH);
+    }
+
     for (const p of this.players) {
       p.tag.setPosition(p.x, p.body.top - 16).setVisible(!p.dead && p.visible).setAlpha(p.alpha);
     }
-  }
-
-  updatePlayerBounds() {
-    const view = visibleRect(this.cameras.main);
-    const left = Phaser.Math.Clamp(view.x + EDGE_MARGIN, 0, this.worldW);
-    const right = Phaser.Math.Clamp(view.right - EDGE_MARGIN, left, this.worldW);
-    this.playerBounds.setTo(left, 0, right - left, this.worldH);
   }
 
   buildTilemap(rows, theme) {
@@ -368,8 +381,10 @@ export default class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: y - 50, alpha: 0, duration: 900, ease: 'Quad.easeOut', onComplete: () => t.destroy() });
   }
 
-  addScore(points, x, y, color) {
+  // Points go to the team score and, with two players, to whoever earned them.
+  addScore(points, x, y, color, player) {
     this.registry.inc('score', points);
+    if (this.twoPlayer && player) this.registry.inc(`score${player.index + 1}`, points);
     this.popup(x, y, `+${points}`, color);
   }
 
@@ -377,12 +392,12 @@ export default class GameScene extends Phaser.Scene {
     if (player.dead || !item.active) return;
     if (item.kind === 'star') {
       this.registry.inc('stars', 1);
-      this.addScore(POINTS.star, item.x, item.y - 20, '#ffd23f');
+      this.addScore(POINTS.star, item.x, item.y - 20, '#ffd23f', player);
       this.goldBurst.explode(10, item.x, item.y);
       sfx.star();
     } else if (item.kind === 'crystal') {
       this.registry.inc('crystals', 1);
-      this.addScore(POINTS.crystal, item.x, item.y - 20, '#41e0ff');
+      this.addScore(POINTS.crystal, item.x, item.y - 20, '#41e0ff', player);
       this.cyanBurst.explode(24, item.x, item.y);
       sfx.crystal();
     } else {
@@ -416,7 +431,7 @@ export default class GameScene extends Phaser.Scene {
       player.combo++;
       enemy.die();
       player.bounce();
-      this.addScore(points, enemy.x, enemy.y - 30, player.combo > 1 ? '#ff5ac8' : '#b8ff9a');
+      this.addScore(points, enemy.x, enemy.y - 30, player.combo > 1 ? '#ff5ac8' : '#b8ff9a', player);
       this.greenBurst.explode(14, enemy.x, enemy.y);
       this.cameras.main.shake(80, 0.004);
       sfx.stomp();
@@ -466,7 +481,7 @@ export default class GameScene extends Phaser.Scene {
   // Knocks out any enemy, even a spiky one (supernova and shield hits).
   smash(enemy, player) {
     enemy.knockOut(enemy.x < player.x ? -1 : 1);
-    this.addScore(POINTS.stomp, enemy.x, enemy.y - 30, '#ff5ac8');
+    this.addScore(POINTS.stomp, enemy.x, enemy.y - 30, '#ff5ac8', player);
     this.greenBurst.explode(14, enemy.x, enemy.y);
     this.cameras.main.shake(80, 0.004);
     sfx.stomp();
@@ -511,14 +526,7 @@ export default class GameScene extends Phaser.Scene {
       if (p.respawnTimer > 0) continue;
       const partner = this.players.find((o) => o !== p && !o.dead);
       if (!partner) {
-        p.respawn(this.respawnPoint.x, this.respawnPoint.y);
-        if (this.twoPlayer) {
-          // jump the camera there so the screen-edge limits don't drag them back
-          this.camTarget.x = p.x;
-          this.camTarget.y = p.y;
-          this.cameras.main.centerOn(p.x, p.y);
-          this.updatePlayerBounds();
-        }
+        p.respawn(this.respawnPoint.x, this.respawnPoint.y); // the camera jumps there too
       } else if (partner.onGround() && partner.dropTimer <= 0) {
         p.respawn(partner.x, partner.y);
       }
@@ -546,12 +554,18 @@ export default class GameScene extends Phaser.Scene {
       sfx.checkpoint();
     }
 
-    if (this.rocket && Phaser.Geom.Intersects.RectangleToRectangle(box, this.rocketZone)) this.launch();
+    if (this.rocket && Phaser.Geom.Intersects.RectangleToRectangle(box, this.rocketZone)) this.launch(p);
   }
 
-  launch() {
+  // player: whoever got to the rocket first; with two players the level
+  // bonus is theirs (the time and all-stars bonuses are for the team)
+  launch(player) {
     if (this.gameOver) return; // the last heart is already gone
     this.finished = true;
+    if (this.twoPlayer) {
+      this.registry.inc(`score${player.index + 1}`, POINTS.clear);
+      this.popup(player.x, player.y - 50, `P${player.index + 1} FIRST! +${POINTS.clear}`, PLAYER_COLORS[player.index], 14);
+    }
     music.stop();
     for (const p of this.players) {
       p.clearPowers();
@@ -594,7 +608,11 @@ export default class GameScene extends Phaser.Scene {
     this.registry.set('powers', this.players[0].powerStatus());
     if (this.twoPlayer) {
       this.registry.set('powers2', this.players[1].powerStatus());
-      this.updateCoop();
+      this.updateCoop(dt);
+    } else {
+      // the same easing whatever the refresh rate (lerp is per frame)
+      const lerp = 1 - Math.exp(-CAMERA_CATCHUP * dt);
+      this.cameras.main.setLerp(lerp, lerp);
     }
     this.updateShadows();
     this.pullPickups(dt);

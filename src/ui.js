@@ -114,7 +114,15 @@ export const startingLives = (players) => LIVES_PER_PLAYER * players;
 // Score, lives and player count for a fresh run.
 export function resetRun(registry, players = getPlayers()) {
   const lives = startingLives(players);
-  registry.set({ score: 0, lives, maxLives: lives, players });
+  registry.set({ score: 0, score1: 0, score2: 0, lives, maxLives: lives, players });
+}
+
+export const PLAYER_COLORS = ['#ffd23f', '#b8ff9a'];
+
+// Two players: who has scored more so far. Returns 0 or 1, or -1 for a tie.
+export function leader(registry) {
+  const a = registry.get('score1'), b = registry.get('score2');
+  return a === b ? -1 : a > b ? 0 : 1;
 }
 
 // Starts a new game (score 0, full lives) at the given level.
