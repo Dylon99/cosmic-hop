@@ -1,4 +1,4 @@
-import { text, button, addBackdrop, updateBackdrop, getHighScore, saveHighScore, pressToContinue, resetRun } from '../ui.js';
+import { text, button, addBackdrop, updateBackdrop, getHighScore, saveHighScore, pressToContinue, resetRun, PLAYER_COLORS, leader } from '../ui.js';
 import { sfx } from '../assets/sounds.js';
 import { DESIGN_W, fitUI, onViewChange } from '../view.js';
 import { isTouchDevice } from '../input.js';
@@ -27,6 +27,13 @@ export default class GameOverScene extends Phaser.Scene {
     text(this, w / 2, 240, 'GAME OVER', 48, '#e43b44').setStroke('#3a0010', 8);
     text(this, w / 2, 320, `SCORE ${score}`, 24);
     text(this, w / 2, 360, isRecord ? 'NEW HIGH SCORE!' : `HIGH SCORE ${getHighScore()}`, 16, '#ffd23f');
+    if (this.registry.get('players') === 2) {
+      // who scored more this run
+      const lead = leader(this.registry);
+      const scores = `${this.registry.get('score1')} - ${this.registry.get('score2')}`;
+      const label = lead < 0 ? `TIE  ${scores}` : `PLAYER ${lead + 1} WINS  ${scores}`;
+      text(this, w / 2, 398, label, 14, lead < 0 ? '#ffffff' : PLAYER_COLORS[lead]);
+    }
 
     const retry = () => {
       sfx.select();
