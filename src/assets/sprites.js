@@ -68,6 +68,8 @@ const hero = [
   [...heroTop, ...heroArmUp, ...legs.tuck], // 6 jump
   [...heroTop, ...heroArmUp, ...legs.stand], // 7 fall
 ];
+// player 2: a green suit with a cyan visor, so the two are easy to tell apart
+const hero2 = hero.map((f) => f.map((row) => row.replace(/[WOo]/g, (ch) => ({ W: 'M', O: 'C', o: 'D' })[ch])));
 
 // ---------------------------------------------------------------- enemies
 const blob = [
@@ -819,6 +821,7 @@ function addHills(scene, key, { sky, planet }, seed) {
 
 export function buildTextures(scene, levels) {
   addSheet(scene, 'hero', hero);
+  addSheet(scene, 'hero2', hero2);
   addSheet(scene, 'blob', blob);
   addSheet(scene, 'drone', drone);
   addSheet(scene, 'crawler', crawler);
@@ -874,10 +877,12 @@ export function buildTextures(scene, levels) {
 export function buildAnimations(scene) {
   const a = (key, tex, frames, frameRate, repeat = -1) =>
     scene.anims.create({ key, frames: frames.map((f) => ({ key: tex, frame: f })), frameRate, repeat });
-  a('hero-idle', 'hero', [0, 0, 0, 1], 3);
-  a('hero-run', 'hero', [2, 3, 4, 5], 12);
-  a('hero-jump', 'hero', [6], 1);
-  a('hero-fall', 'hero', [7], 1);
+  for (const skin of ['hero', 'hero2']) {
+    a(`${skin}-idle`, skin, [0, 0, 0, 1], 3);
+    a(`${skin}-run`, skin, [2, 3, 4, 5], 12);
+    a(`${skin}-jump`, skin, [6], 1);
+    a(`${skin}-fall`, skin, [7], 1);
+  }
   a('blob-walk', 'blob', [0, 1], 4);
   a('drone-fly', 'drone', [0, 1], 14);
   a('crawler-walk', 'crawler', [0, 1], 8);

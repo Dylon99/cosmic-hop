@@ -15,6 +15,15 @@ Then open http://localhost:8000. To pick any level, press **L** (or tap **LEVELS
 
 **Controls:** Arrows/WASD to move, Space/Up/W to jump (hold for higher), Down/S to drop through a floating platform, P or Esc to pause, M to mute (sound and music). The pause screen has buttons to resume, pick another level or go back to the main menu (keys: L for levels, Q for the main menu).
 
+**Two players:** on the title screen, press **1** or **2** (or click the **1 PLAYER / 2 PLAYERS** button) to pick the number of players; the choice is remembered, and `?players=2` in the URL does the same. Player 1 (white suit) uses **WASD** with **W** or **Space** to jump and **S** to drop; player 2 (green suit) uses the **arrow keys** with **Up** to jump and **Down** to drop. It's co-op on one screen:
+
+- The camera follows the middle of the two, and neither player can leave the screen, so whoever is ahead has to wait for the other.
+- You share the score, the star and crystal counts and one pool of 6 hearts. Every death costs a heart; running out is game over for both.
+- A player who dies comes back next to their partner as soon as the partner is standing on something. If both are down, both restart at the last checkpoint.
+- Super powers belong to whoever grabbed them (player 2's show on the right under the top bar). Either player reaching the rocket finishes the level.
+
+Two-player mode isn't offered on phones and tablets without a keyboard. Some cheap keyboards can't register many keys held at once, which can drop a key when both players are pressing several.
+
 **On phones:** hold the phone in landscape. Use the ◀ ▶ buttons on the left to move and the ▼ button above them to drop through a floating platform, and tap anywhere on the right half of the screen to jump (hold for higher). Pause and mute buttons are in the top-right corner. Adding the page to your home screen runs it full screen with no browser bars.
 
 The game always fills the window. Wider screens show more of the level, and the canvas renders at the screen's real resolution so pixels and text stay sharp.
@@ -85,5 +94,6 @@ The pixel art is lit as if every shape were a rounded 3D object, with light from
 - `src/powers.js`: the super powers and their map letters
 - `src/assets/sounds.js`: sound effects
 - `src/assets/music.js`: the music themes and the little sequencer that plays them
+- `src/input.js`: key schemes (one player, or WASD / arrows for two) and the touch buttons' state
 - `src/entities/`: the player and enemies
 - `src/scenes/`: boot, menu, game, HUD, level complete and game over

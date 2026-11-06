@@ -1,5 +1,5 @@
 import { sfx } from '../assets/sounds.js';
-import { touch } from '../input.js';
+import { touch, CONTROLS } from '../input.js';
 import { POWERS } from '../powers.js';
 
 const RUN_SPEED = 300;
@@ -12,8 +12,10 @@ const SPEED_BOOST = 1.6; // run speed multiplier with hyper speed
 const DROP_TIME = 0.25; // seconds platforms let you fall through after pressing down
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
-  constructor(scene, x, y) {
-    super(scene, x, y, 'hero', 0);
+  // controls: a scheme from CONTROLS; skin: 'hero' or 'hero2'
+  constructor(scene, x, y, { controls = CONTROLS.solo, skin = 'hero' } = {}) {
+    super(scene, x, y, skin, 0);
+    this.skin = skin;
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(10);
@@ -21,7 +23,11 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.body.setMaxVelocityY(950);
     this.setCollideWorldBounds(true);
 
-    this.keys = scene.input.keyboard.addKeys('LEFT,RIGHT,UP,DOWN,A,D,W,S,SPACE');
+    const keys = (names) => names.map((name) => scene.input.keyboard.addKey(name));
+    this.keys = { left: keys(controls.left), right: keys(controls.right), jump: keys(controls.jump), down: keys(controls.down) };
+    this.useTouch = controls.touch;
+    this.lastSafe = { x, y }; // last spot standing on solid ground (a partner respawns here)
+    this.respawnTimer = 0;
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.jumpHeld = false;
@@ -71,13 +77,14 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     const dt = delta / 1000;
     const k = this.keys;
     const body = this.body;
-    const onGround = body.blocked.down || body.touching.down; // touching = on a moving platform
+    const onGround = this.onGround();
 
-    const dir = (k.RIGHT.isDown || k.D.isDown || touch.right ? 1 : 0) - (k.LEFT.isDown || k.A.isDown || touch.left ? 1 : 0);
+    const dir = (this.held('right') ? 1 : 0) - (this.held('left') ? 1 : 0);
     const jumpDown = this.jumpHeldDown();
-    const touchJumpPressed = touch.jump && !this.prevTouchJump;
-    this.prevTouchJump = touch.jump;
-    const jumpPressed = [k.UP, k.W, k.SPACE].map((key) => Phaser.Input.Keyboard.JustDown(key)).some(Boolean) || touchJumpPressed;
+    const touchJump = this.useTouch && touch.jump;
+    const touchJumpPressed = touchJump && !this.prevTouchJump;
+    this.prevTouchJump = touchJump;
+    const jumpPressed = k.jump.map((key) => Phaser.Input.Keyboard.JustDown(key)).some(Boolean) || touchJumpPressed;
 
     this.updatePowers(dt);
     const boost = this.hasPower('speed') ? SPEED_BOOST : this.hasPower('nova') ? 1.25 : 1;
@@ -118,7 +125,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
     // down while standing on a floating platform drops through it
     this.dropTimer -= dt;
-    const downHeld = k.DOWN.isDown || k.S.isDown || touch.down;
+    const downHeld = this.held('down');
     if (downHeld && onGround && !jumpPressed && this.scene.onlyPlatformsBelow(body)) {
       this.dropTimer = DROP_TIME;
       this.coyote = 0;
@@ -150,9 +157,10 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
 
     if (onGround && !this.wasOnGround) this.scene.dust.explode(4, this.x, this.body.bottom);
     this.wasOnGround = onGround;
+    if (body.blocked.down && this.dropTimer <= 0) this.lastSafe = { x: this.x, y: this.y };
 
-    if (!onGround) this.anims.play(body.velocity.y < 0 ? 'hero-jump' : 'hero-fall', true);
-    else this.anims.play(Math.abs(vx) > 20 ? 'hero-run' : 'hero-idle', true);
+    const anim = !onGround ? (body.velocity.y < 0 ? 'jump' : 'fall') : Math.abs(vx) > 20 ? 'run' : 'idle';
+    this.anims.play(`${this.skin}-${anim}`, true);
 
     if (this.invulnerable > 0) {
       this.invulnerable -= dt;
@@ -199,8 +207,18 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  // Standing on something (touching = on a moving platform).
+  onGround() {
+    return this.body.blocked.down || this.body.touching.down;
+  }
+
+  // Is any key (or touch button) for this action held? action: left, right, jump or down.
+  held(action) {
+    return this.keys[action].some((key) => key.isDown) || (this.useTouch && touch[action]);
+  }
+
   jumpHeldDown() {
-    return this.keys.UP.isDown || this.keys.W.isDown || this.keys.SPACE.isDown || touch.jump;
+    return this.held('jump');
   }
 
   bounce() {
@@ -219,6 +237,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.body.setVelocity(0, fellInPit ? 0 : -600);
     this.body.setAllowGravity(!fellInPit);
     this.setCollideWorldBounds(false);
+    this.layerCollider.active = false;
+    this.moverCollider.active = false;
   }
 
   respawn(x, y) {
@@ -228,6 +248,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.body.reset(x, y);
     this.body.setAllowGravity(true);
     this.setCollideWorldBounds(true);
+    this.layerCollider.active = true;
+    this.moverCollider.active = true;
     this.setFlipX(false);
     this.invulnerable = 1.5;
     this.dropTimer = 0;

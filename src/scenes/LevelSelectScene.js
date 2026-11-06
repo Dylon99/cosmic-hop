@@ -1,6 +1,6 @@
 import { LEVELS } from '../levels.js';
 import { TILE_INDEX, groundTiles } from '../assets/sprites.js';
-import { text, button, addBackdrop, updateBackdrop, startRun } from '../ui.js';
+import { text, button, addBackdrop, updateBackdrop, startRun, getPlayers } from '../ui.js';
 import { sfx } from '../assets/sounds.js';
 import { music } from '../assets/music.js';
 import { DESIGN_W, fitUI, onViewChange } from '../view.js';
@@ -31,6 +31,7 @@ export default class LevelSelectScene extends Phaser.Scene {
 
     text(this, w / 2, 75, 'SELECT LEVEL', 32, '#ffd23f').setStroke('#7a2a00', 6);
     button(this, 80, 75, 'BACK', () => this.back(), '#a8b0d8', 12);
+    if (getPlayers() === 2) text(this, w / 2, 112, '2 PLAYERS', 12, '#b8ff9a');
 
     const left = (w - (COLS * CARD_W + (COLS - 1) * GAP_X)) / 2 + CARD_W / 2;
     this.cards = LEVELS.map((lvl, i) => this.addCard(lvl, i, left + (i % COLS) * (CARD_W + GAP_X), ROW_Y[Math.floor(i / COLS)]));

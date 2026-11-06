@@ -1,4 +1,4 @@
-import { text, button, addBackdrop, updateBackdrop, getHighScore, saveHighScore, pressToContinue } from '../ui.js';
+import { text, button, addBackdrop, updateBackdrop, getHighScore, saveHighScore, pressToContinue, resetRun } from '../ui.js';
 import { sfx } from '../assets/sounds.js';
 import { DESIGN_W, fitUI, onViewChange } from '../view.js';
 import { isTouchDevice } from '../input.js';
@@ -30,7 +30,7 @@ export default class GameOverScene extends Phaser.Scene {
 
     const retry = () => {
       sfx.select();
-      this.registry.set({ score: 0, lives: 3 });
+      resetRun(this.registry, this.registry.get('players'));
       this.scene.start('Game', { level });
     };
     const menu = () => this.scene.start('Menu');
