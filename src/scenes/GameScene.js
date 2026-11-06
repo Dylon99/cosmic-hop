@@ -502,7 +502,6 @@ export default class GameScene extends Phaser.Scene {
     player.die(fellInPit);
     player.respawnTimer = RESPAWN_DELAY;
     sfx.hurt();
-    this.cameras.main.shake(250, 0.012);
     const lives = Math.max(0, this.registry.get('lives') - 1);
     this.registry.set('lives', lives);
     if (lives > 0 || this.gameOver) return;
