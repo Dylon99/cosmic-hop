@@ -3,7 +3,8 @@ import { TILE, TILE_INDEX, groundTiles } from '../assets/sprites.js';
 import { sfx } from '../assets/sounds.js';
 import { music } from '../assets/music.js';
 import { text, addBackdrop, updateBackdrop } from '../ui.js';
-import { fitGame, onViewChange } from '../view.js';
+import { fitGame, onViewChange, visibleRect } from '../view.js';
+import { CONTROLS } from '../input.js';
 import Player from '../entities/Player.js';
 import { Blob, Crawler, Drone, Hopper, Spitter, Swooper } from '../entities/enemies.js';
 import { POWERS, POWER_BY_CHAR } from '../powers.js';
@@ -13,6 +14,9 @@ const SLAB_STEPS = 12; // copies of the tilemap stacked behind it to give blocks
 const SLAB_STEP = 1; // px each copy moves up and to the right
 const MAGNET_RANGE = 260;
 const MOVER_SPEED = 100; // px per second
+const RESPAWN_DELAY = 1.3; // seconds
+const EDGE_MARGIN = 16; // two players: how close to the screen edge either can go
+const TAG_COLORS = ['#ffd23f', '#b8ff9a'];
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -27,6 +31,8 @@ export default class GameScene extends Phaser.Scene {
     this.worldW = W * TILE;
     this.worldH = H * TILE;
     this.finished = false;
+    this.gameOver = false;
+    this.twoPlayer = this.registry.get('players') === 2;
     this.timeLeft = L.time;
     this.slippery = L.ground === 'ice';
     music.play(L.music);
@@ -84,21 +90,18 @@ export default class GameScene extends Phaser.Scene {
     this.respawnPoint = start;
     this.createMovers(rows);
 
-    this.player = new Player(this, start.x, start.y);
-    this.playerShadow = this.add.image(start.x, start.y, 'shadow').setDepth(1);
     this.physics.world.setBounds(0, 0, this.worldW, this.worldH, true, true, false, false);
-    // floating platforms stop holding the player up for a moment after they press down
-    this.layerCollider = this.physics.add.collider(this.player, this.layer, null,
-      (player, tile) => !(tile.index === TILE_INDEX.platform && player.dropTimer > 0));
-    this.moverCollider = this.physics.add.collider(this.player, this.movers, (player, mover) => {
-      if (player.body.touching.down) player.riding = mover;
-    }, (player) => player.dropTimer <= 0);
+    // two players share the screen: each is kept inside what the camera shows
+    this.playerBounds = new Phaser.Geom.Rectangle(0, 0, this.worldW, this.worldH);
+    this.players = this.twoPlayer
+      ? [
+        new Player(this, start.x - 12, start.y, { controls: CONTROLS.p1 }),
+        new Player(this, start.x + 12, start.y, { controls: CONTROLS.p2, skin: 'hero2' }),
+      ]
+      : [new Player(this, start.x, start.y)];
+    this.players.forEach((player, i) => this.setupPlayer(player, i));
     this.physics.add.collider(this.walkers, this.layer);
-    this.physics.add.overlap(this.player, this.walkers, this.hitEnemy, null, this);
-    this.physics.add.overlap(this.player, this.drones, this.hitEnemy, null, this);
-    this.physics.add.overlap(this.player, this.shots, this.hitShot, null, this);
     this.physics.add.collider(this.shots, this.layer, (shot) => this.popShot(shot));
-    this.physics.add.overlap(this.player, this.pickups, this.collect, null, this);
 
     const cam = this.cameras.main;
     fitGame(this, this.worldW);
@@ -106,8 +109,16 @@ export default class GameScene extends Phaser.Scene {
       fitGame(this, this.worldW);
       updateBackdrop(this.backdrop, cam);
     });
-    cam.startFollow(this.player, true, 0.15, 0.15);
-    cam.setDeadzone(120, 200);
+    if (this.twoPlayer) {
+      // follow the middle of the two; no deadzone so the screen stays centred
+      // between them and neither gets pushed by the edge while the other runs
+      this.camTarget = { x: start.x, y: start.y };
+      cam.startFollow(this.camTarget, true, 0.15, 0.15);
+      cam.centerOn(start.x, start.y);
+    } else {
+      cam.startFollow(this.players[0], true, 0.15, 0.15);
+      cam.setDeadzone(120, 200);
+    }
     cam.fadeIn(400);
     // move the backdrop once the camera has its final position for the frame
     cam.on('followupdate', () => updateBackdrop(this.backdrop, cam));
@@ -115,9 +126,56 @@ export default class GameScene extends Phaser.Scene {
 
     this.registry.set({
       level: level + 1, levelName: L.name, time: Math.ceil(this.timeLeft),
-      stars: 0, starsTotal: stars, crystals: 0, crystalsTotal: crystals, powers: [],
+      stars: 0, starsTotal: stars, crystals: 0, crystalsTotal: crystals, powers: [], powers2: [],
     });
     this.scene.launch('HUD');
+  }
+
+  setupPlayer(player, i) {
+    player.shadow = this.add.image(player.x, player.y, 'shadow').setDepth(1);
+    // floating platforms stop holding the player up for a moment after they press down
+    player.layerCollider = this.physics.add.collider(player, this.layer, null,
+      (p, tile) => !(tile.index === TILE_INDEX.platform && p.dropTimer > 0));
+    player.moverCollider = this.physics.add.collider(player, this.movers, (p, mover) => {
+      if (p.body.touching.down) p.riding = mover;
+    }, (p) => p.dropTimer <= 0);
+    this.physics.add.overlap(player, this.walkers, this.hitEnemy, null, this);
+    this.physics.add.overlap(player, this.drones, this.hitEnemy, null, this);
+    this.physics.add.overlap(player, this.shots, this.hitShot, null, this);
+    this.physics.add.overlap(player, this.pickups, this.collect, null, this);
+    if (this.twoPlayer) {
+      player.body.setBoundsRectangle(this.playerBounds);
+      player.tag = text(this, player.x, player.y, `P${i + 1}`, 10, TAG_COLORS[i]).setDepth(12);
+    }
+  }
+
+  // The living player closest to (x, y), for enemies to aim at. Falls back to
+  // player 1 when nobody is alive (enemies check .dead themselves).
+  nearestPlayer(x, y) {
+    const alive = this.players.filter((p) => !p.dead);
+    if (!alive.length) return this.players[0];
+    return alive.reduce((a, b) => (Phaser.Math.Distance.Between(x, y, a.x, a.y) <= Phaser.Math.Distance.Between(x, y, b.x, b.y) ? a : b));
+  }
+
+  // Two players: aim the camera between the living players and keep both
+  // inside the visible part of the level.
+  updateCoop() {
+    const alive = this.players.filter((p) => !p.dead);
+    if (alive.length) {
+      this.camTarget.x = alive.reduce((sum, p) => sum + p.x, 0) / alive.length;
+      this.camTarget.y = alive.reduce((sum, p) => sum + p.y, 0) / alive.length;
+    }
+    this.updatePlayerBounds();
+    for (const p of this.players) {
+      p.tag.setPosition(p.x, p.body.top - 16).setVisible(!p.dead && p.visible).setAlpha(p.alpha);
+    }
+  }
+
+  updatePlayerBounds() {
+    const view = visibleRect(this.cameras.main);
+    const left = Phaser.Math.Clamp(view.x + EDGE_MARGIN, 0, this.worldW);
+    const right = Phaser.Math.Clamp(view.right - EDGE_MARGIN, left, this.worldW);
+    this.playerBounds.setTo(left, 0, right - left, this.worldH);
   }
 
   buildTilemap(rows, theme) {
@@ -260,29 +318,31 @@ export default class GameScene extends Phaser.Scene {
   }
 
   updateShadows() {
-    const p = this.player;
-    if (p.visible) this.castShadow(this.playerShadow, p.x, p.body.bottom, 36);
-    else this.playerShadow.setVisible(false);
+    for (const p of this.players) {
+      if (p.visible) this.castShadow(p.shadow, p.x, p.body.bottom, 36);
+      else p.shadow.setVisible(false);
+    }
     for (const e of [...this.walkers.getChildren(), ...this.drones.getChildren()]) {
       if (e.alive) this.castShadow(e.shadow, e.x, e.body.bottom, 40);
     }
   }
 
-  // Stars and crystals in range fly to the player while the magnet is on,
-  // and keep flying once they have started.
+  // Stars and crystals in range fly to a player with the magnet on, and
+  // keep flying to them once they have started.
   pullPickups(dt) {
-    const p = this.player;
-    const magnet = p.hasPower('magnet');
+    const magnets = this.players.filter((p) => !p.dead && p.hasPower('magnet'));
     for (const item of this.pickups.getChildren()) {
       if (item.kind === 'power') continue;
-      const dist = Phaser.Math.Distance.Between(item.x, item.y, p.x, p.y);
       if (!item.pulled) {
-        if (!magnet || dist > MAGNET_RANGE) continue;
-        item.pulled = true;
+        const p = magnets.find((m) => Phaser.Math.Distance.Between(item.x, item.y, m.x, m.y) <= MAGNET_RANGE);
+        if (!p) continue;
+        item.pulled = p;
         this.tweens.killTweensOf(item);
         item.setScale(1);
         item.shadow.setVisible(false);
       }
+      const p = item.pulled;
+      const dist = Phaser.Math.Distance.Between(item.x, item.y, p.x, p.y);
       const step = Math.min(dist, (500 + Math.max(0, MAGNET_RANGE - dist) * 5) * dt);
       const angle = Math.atan2(p.y - item.y, p.x - item.x);
       item.setPosition(item.x + Math.cos(angle) * step, item.y + Math.sin(angle) * step);
@@ -345,7 +405,7 @@ export default class GameScene extends Phaser.Scene {
   hitEnemy(player, enemy) {
     if (player.dead || !enemy.alive || this.finished) return;
     if (player.hasPower('nova')) {
-      this.smash(enemy);
+      this.smash(enemy, player);
       return;
     }
     const falling = player.body.velocity.y > 0;
@@ -362,10 +422,10 @@ export default class GameScene extends Phaser.Scene {
       sfx.stomp();
     } else if (player.invulnerable <= 0) {
       if (player.hasPower('shield')) {
-        this.breakShield();
-        this.smash(enemy);
+        this.breakShield(player);
+        this.smash(enemy, player);
       } else {
-        this.killPlayer(false);
+        this.killPlayer(player, false);
       }
     }
   }
@@ -391,8 +451,8 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
     this.popShot(shot);
-    if (player.hasPower('shield')) this.breakShield();
-    else this.killPlayer(false);
+    if (player.hasPower('shield')) this.breakShield(player);
+    else this.killPlayer(player, false);
   }
 
   updateShots(dt) {
@@ -404,16 +464,15 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // Knocks out any enemy, even a spiky one (supernova and shield hits).
-  smash(enemy) {
-    enemy.knockOut(enemy.x < this.player.x ? -1 : 1);
+  smash(enemy, player) {
+    enemy.knockOut(enemy.x < player.x ? -1 : 1);
     this.addScore(POINTS.stomp, enemy.x, enemy.y - 30, '#ff5ac8');
     this.greenBurst.explode(14, enemy.x, enemy.y);
     this.cameras.main.shake(80, 0.004);
     sfx.stomp();
   }
 
-  breakShield() {
-    const p = this.player;
+  breakShield(p) {
     p.removePower('shield');
     p.invulnerable = 1;
     p.body.setVelocityY(-420);
@@ -422,38 +481,58 @@ export default class GameScene extends Phaser.Scene {
     sfx.shieldBreak();
   }
 
-  killPlayer(fellInPit) {
-    if (this.player.dead || this.finished) return;
-    this.player.die(fellInPit);
-    this.layerCollider.active = false;
-    this.moverCollider.active = false;
+  // Every death costs a heart from the (shared) pool; out of hearts is game over.
+  killPlayer(player, fellInPit) {
+    if (player.dead || this.finished) return;
+    player.die(fellInPit);
+    player.respawnTimer = RESPAWN_DELAY;
     sfx.hurt();
     this.cameras.main.shake(250, 0.012);
-    const lives = this.registry.get('lives') - 1;
+    const lives = Math.max(0, this.registry.get('lives') - 1);
     this.registry.set('lives', lives);
-    this.time.delayedCall(1300, () => {
-      if (lives <= 0) {
-        music.stop();
-        sfx.gameOver();
-        this.scene.stop('HUD');
-        this.scene.start('GameOver', { level: this.levelIndex });
-        return;
-      }
-      this.player.respawn(this.respawnPoint.x, this.respawnPoint.y);
-      this.layerCollider.active = true;
-      this.moverCollider.active = true;
+    if (lives > 0 || this.gameOver) return;
+    this.gameOver = true;
+    this.time.delayedCall(RESPAWN_DELAY * 1000, () => {
+      music.stop();
+      sfx.gameOver();
+      this.scene.stop('HUD');
+      this.scene.start('GameOver', { level: this.levelIndex });
     });
   }
 
-  checkTriggers() {
-    const p = this.player;
+  // Dead players come back once their delay is up: next to their partner if
+  // they're alive (as soon as the partner is standing on something), or at
+  // the last checkpoint if everyone is down.
+  updateRespawns(dt) {
+    if (this.gameOver) return;
+    for (const p of this.players) {
+      if (!p.dead) continue;
+      p.respawnTimer -= dt;
+      if (p.respawnTimer > 0) continue;
+      const partner = this.players.find((o) => o !== p && !o.dead);
+      if (!partner) {
+        p.respawn(this.respawnPoint.x, this.respawnPoint.y);
+        if (this.twoPlayer) {
+          // jump the camera there so the screen-edge limits don't drag them back
+          this.camTarget.x = p.x;
+          this.camTarget.y = p.y;
+          this.cameras.main.centerOn(p.x, p.y);
+          this.updatePlayerBounds();
+        }
+      } else if (partner.onGround() && partner.dropTimer <= 0) {
+        p.respawn(partner.x, partner.y);
+      }
+    }
+  }
+
+  checkTriggers(p) {
     const box = new Phaser.Geom.Rectangle(p.body.x, p.body.y, p.body.width, p.body.height);
 
     if (p.invulnerable <= 0 && !p.hasPower('nova') && this.spikes.some((s) => Phaser.Geom.Intersects.RectangleToRectangle(box, s))) {
       if (p.hasPower('shield')) {
-        this.breakShield();
+        this.breakShield(p);
       } else {
-        this.killPlayer(false);
+        this.killPlayer(p, false);
         return;
       }
     }
@@ -471,13 +550,17 @@ export default class GameScene extends Phaser.Scene {
   }
 
   launch() {
+    if (this.gameOver) return; // the last heart is already gone
     this.finished = true;
     music.stop();
-    this.player.clearPowers();
-    this.player.body.enable = false;
-    this.player.setVisible(false);
-    this.playerShadow.setVisible(false);
-    this.registry.set('powers', []);
+    for (const p of this.players) {
+      p.clearPowers();
+      p.body.enable = false;
+      p.setVisible(false);
+      p.shadow.setVisible(false);
+      p.tag?.setVisible(false);
+    }
+    this.registry.set({ powers: [], powers2: [] });
     sfx.launch();
     this.rocket.play('rocket-fire');
     this.cameras.main.stopFollow();
@@ -505,25 +588,34 @@ export default class GameScene extends Phaser.Scene {
 
   update(time, delta) {
     if (this.finished) return;
+    const dt = delta / 1000;
     this.updateMovers();
-    this.player.update(time, delta);
-    this.registry.set('powers', this.player.powerStatus());
-    this.updateShadows();
-    this.pullPickups(delta / 1000);
-    this.updateShots(delta / 1000);
-    if (this.player.dead) return;
-
-    if (this.player.y > this.worldH + 40) {
-      this.killPlayer(true);
-      return;
+    this.players.forEach((p) => p.update(time, delta));
+    this.registry.set('powers', this.players[0].powerStatus());
+    if (this.twoPlayer) {
+      this.registry.set('powers2', this.players[1].powerStatus());
+      this.updateCoop();
     }
-    this.checkTriggers();
+    this.updateShadows();
+    this.pullPickups(dt);
+    this.updateShots(dt);
+    this.updateRespawns(dt);
 
-    this.timeLeft -= delta / 1000;
+    const alive = this.players.filter((p) => !p.dead);
+    if (!alive.length) return;
+    for (const p of alive) {
+      if (p.y > this.worldH + 40) this.killPlayer(p, true);
+      else this.checkTriggers(p);
+      if (this.finished) return;
+    }
+
+    this.timeLeft -= dt;
     if (this.timeLeft <= 0) {
       this.timeLeft = LEVELS[this.levelIndex].time;
-      this.popup(this.player.x, this.player.y - 40, 'OUT OF TIME', '#e43b44', 14);
-      this.killPlayer(false);
+      for (const p of alive) {
+        this.popup(p.x, p.y - 40, 'OUT OF TIME', '#e43b44', 14);
+        this.killPlayer(p, false);
+      }
     }
     this.registry.set('time', Math.max(0, Math.ceil(this.timeLeft)));
   }

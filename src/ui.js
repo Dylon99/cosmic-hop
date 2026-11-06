@@ -1,5 +1,5 @@
 import { DESIGN_H, visibleRect, textResolution } from './view.js';
-import { isTouchDevice } from './input.js';
+import { isTouchDevice, canPlayTwo } from './input.js';
 
 export const FONT = '"Press Start 2P", monospace';
 
@@ -87,7 +87,37 @@ export function pressToContinue(scene, keys, cb, tap = true) {
   if (tap) scene.input.on('pointerdown', (pointer, over) => over.length || go());
 }
 
-// Starts a new game (score 0, 3 lives) at the given level.
+const PLAYERS_KEY = 'cosmic-hop-players';
+const LIVES_PER_PLAYER = 3;
+
+// 1 or 2 players, remembered in the browser.
+export function getPlayers() {
+  if (!canPlayTwo) return 1;
+  try {
+    return localStorage.getItem(PLAYERS_KEY) === '2' ? 2 : 1;
+  } catch {
+    return 1;
+  }
+}
+
+export function setPlayers(n) {
+  try {
+    localStorage.setItem(PLAYERS_KEY, String(n));
+  } catch {
+    // storage blocked - the choice just won't be remembered
+  }
+}
+
+// Two players share one pool of hearts: 3 each.
+export const startingLives = (players) => LIVES_PER_PLAYER * players;
+
+// Score, lives and player count for a fresh run.
+export function resetRun(registry, players = getPlayers()) {
+  const lives = startingLives(players);
+  registry.set({ score: 0, lives, maxLives: lives, players });
+}
+
+// Starts a new game (score 0, full lives) at the given level.
 export function startRun(scene, level) {
   // hide the browser bars on phones that allow it (not iPhone Safari)
   if (isTouchDevice && scene.scale.fullscreen.available && !scene.scale.isFullscreen) {
@@ -97,6 +127,6 @@ export function startRun(scene, level) {
       // not allowed here - play in the normal browser view
     }
   }
-  scene.registry.set({ score: 0, lives: 3 });
+  resetRun(scene.registry);
   scene.scene.start('Game', { level });
 }

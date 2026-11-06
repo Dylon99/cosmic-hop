@@ -5,8 +5,8 @@ import { fitOverlay, onViewChange, safeInsets, textResolution } from '../view.js
 import { touch, isTouchDevice } from '../input.js';
 import { POWERS } from '../powers.js';
 
-const MAX_HEARTS = 3;
 const BAR_H = 44;
+const HEART_GAP = 30;
 
 export default class HUDScene extends Phaser.Scene {
   constructor() {
@@ -17,7 +17,9 @@ export default class HUDScene extends Phaser.Scene {
     this.view = fitOverlay(this);
     this.bar = this.add.rectangle(0, 0, 10, BAR_H, 0x000000, 0.45).setOrigin(0);
 
-    this.hearts = Array.from({ length: MAX_HEARTS }, () => this.add.image(0, BAR_H / 2, 'heart-icon'));
+    const r = this.registry;
+    this.twoPlayer = r.get('players') === 2;
+    this.hearts = Array.from({ length: r.get('maxLives') || 3 }, () => this.add.image(0, BAR_H / 2, 'heart-icon'));
     const label = (color) => this.add.text(0, BAR_H / 2, '', {
       fontFamily: FONT, fontSize: '16px', color, resolution: textResolution(this),
     }).setOrigin(0, 0.5);
@@ -34,14 +36,16 @@ export default class HUDScene extends Phaser.Scene {
         event.stopPropagation();
         onPress();
       });
-    // active super powers: an icon each, with a bar showing the time left
-    this.powerIcons = Object.fromEntries(Object.keys(POWERS).map((name) =>
+    // active super powers: an icon each, with a bar showing the time left.
+    // Player 2's row runs in from the right.
+    const powerIcons = () => Object.fromEntries(Object.keys(POWERS).map((name) =>
       [name, this.add.image(0, 0, `power-${name}-icon`).setVisible(false)]));
+    this.powerIcons = this.twoPlayer ? [powerIcons(), powerIcons()] : [powerIcons()];
     this.powerBars = this.add.graphics();
     this.pauseBtn = iconButton('btn-pause', () => this.togglePause());
     this.muteBtn = iconButton('btn-sound', () => toggleMute());
 
-    if (isTouchDevice) {
+    if (isTouchDevice && !this.twoPlayer) {
       this.pads = {
         left: this.add.image(0, 0, 'btn-left', 0),
         right: this.add.image(0, 0, 'btn-right', 0),
@@ -66,7 +70,6 @@ export default class HUDScene extends Phaser.Scene {
     this.pauseButtons.forEach((b) => b.setVisible(false));
     this.wasPaused = false;
 
-    const r = this.registry;
     this.banner = text(this, 0, 0, `LEVEL ${r.get('level')}\n${r.get('levelName')}`, 32, '#ffd23f').setLineSpacing(16);
     this.tweens.add({ targets: this.banner, alpha: 0, delay: 1600, duration: 600, onComplete: () => this.banner.destroy() });
 
@@ -102,11 +105,12 @@ export default class HUDScene extends Phaser.Scene {
     const safe = safeInsets(this);
     const left = 16 + safe.left, right = w - 16 - safe.right;
     this.left = left;
+    this.right = right;
     this.bar.setSize(w, BAR_H);
 
     // top bar: lives and score on the left, everything else flows in from the right
-    this.hearts.forEach((heart, i) => heart.setPosition(left + 12 + i * 30, BAR_H / 2));
-    this.score.setX(left + MAX_HEARTS * 30 + 16);
+    this.hearts.forEach((heart, i) => heart.setPosition(left + 12 + i * HEART_GAP, BAR_H / 2));
+    this.score.setX(left + this.hearts.length * HEART_GAP + 16);
     // narrow screens: shrink the bar text, then drop the "SCORE" label
     for (const compact of [0, 1, 2]) {
       this.compact = compact;
@@ -161,18 +165,22 @@ export default class HUDScene extends Phaser.Scene {
     this.last = v;
   }
 
-  drawPowers(powers, time) {
+  // perPlayer: one list of [name, fraction left] per player
+  drawPowers(perPlayer, time) {
     const g = this.powerBars.clear();
-    Object.values(this.powerIcons).forEach((icon) => icon.setVisible(false));
-    powers.forEach(([name, left], i) => {
-      const x = this.left + 20 + i * 44, y = BAR_H + 24;
-      // blink for the last couple of seconds
-      const { time: total } = POWERS[name];
-      const ending = total && left * total < 2 && Math.floor(time / 120) % 2;
-      this.powerIcons[name].setPosition(x, y).setVisible(true).setAlpha(ending ? 0.35 : 1);
-      if (!total) return;
-      g.fillStyle(0x000000, 0.55).fillRect(x - 17, y + 21, 34, 6);
-      g.fillStyle(Phaser.Display.Color.HexStringToColor(POWERS[name].color).color, 1).fillRect(x - 16, y + 22, 32 * left, 4);
+    perPlayer.forEach((powers, p) => {
+      const icons = this.powerIcons[p];
+      Object.values(icons).forEach((icon) => icon.setVisible(false));
+      powers.forEach(([name, left], i) => {
+        const x = p === 0 ? this.left + 20 + i * 44 : this.right - 20 - i * 44, y = BAR_H + 24;
+        // blink for the last couple of seconds
+        const { time: total } = POWERS[name];
+        const ending = total && left * total < 2 && Math.floor(time / 120) % 2;
+        icons[name].setPosition(x, y).setVisible(true).setAlpha(ending ? 0.35 : 1);
+        if (!total) return;
+        g.fillStyle(0x000000, 0.55).fillRect(x - 17, y + 21, 34, 6);
+        g.fillStyle(Phaser.Display.Color.HexStringToColor(POWERS[name].color).color, 1).fillRect(x - 16, y + 22, 32 * left, 4);
+      });
     });
   }
 
@@ -202,7 +210,8 @@ export default class HUDScene extends Phaser.Scene {
 
   update(time) {
     this.refresh(this.registry);
-    this.drawPowers(this.registry.get('powers') || [], time);
+    const r = this.registry;
+    this.drawPowers(this.twoPlayer ? [r.get('powers') || [], r.get('powers2') || []] : [r.get('powers') || []], time);
     this.updateTouch();
     const paused = this.scene.isPaused('Game');
     if (paused !== this.wasPaused) {

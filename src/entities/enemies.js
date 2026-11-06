@@ -125,7 +125,7 @@ export class Hopper extends Enemy {
     this.wait -= delta / 1000;
     if (this.wait > 0) return;
     this.wait = 1.2 + Math.random() * 0.8;
-    const p = this.scene.player;
+    const p = this.scene.nearestPlayer(this.x, this.y);
     let dir = Math.abs(p.x - this.x) < 400 ? Math.sign(p.x - this.x) || 1 : (Math.random() < 0.5 ? -1 : 1);
     const landsOn = (d) => this.scene.isSolidAt(this.x + d * 100, b.bottom + 4);
     if (!landsOn(dir)) dir = landsOn(-dir) ? -dir : 0;
@@ -150,7 +150,7 @@ export class Spitter extends Enemy {
 
   update(time, delta) {
     if (!this.alive) return;
-    const p = this.scene.player;
+    const p = this.scene.nearestPlayer(this.x, this.y);
     const dir = p.x < this.x ? -1 : 1;
     this.setFlipX(dir < 0);
     if (p.dead || Math.abs(p.x - this.x) > 520 || Math.abs(p.y - this.y) > 120) return;
@@ -180,7 +180,7 @@ export class Swooper extends Enemy {
 
   update(time, delta) {
     if (!this.alive) return;
-    const dt = delta / 1000, p = this.scene.player;
+    const dt = delta / 1000, p = this.scene.nearestPlayer(this.x, this.y);
     if (this.state === 'hang') {
       const depth = p.y - this.y;
       if (p.dead || Math.abs(p.x - this.x) > 220 || depth < 60 || depth > 420) return;
