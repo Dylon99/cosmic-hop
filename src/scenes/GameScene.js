@@ -9,7 +9,8 @@ import Player from '../entities/Player.js';
 import { Blob, Crawler, Drone, Hopper, Spitter, Swooper } from '../entities/enemies.js';
 import { POWERS, POWER_BY_CHAR } from '../powers.js';
 
-const POINTS = { star: 10, crystal: 50, stomp: 100, clear: 500, perSecond: 5, allStars: 250 };
+const POINTS = { star: 10, crystal: 50, stomp: 100, clear: 500, perSecond: 5, allStars: 250, cell: 100 };
+const SHRINK_INVULNERABLE = 1.5; // seconds of blinking after the big suit takes a hit
 const SLAB_STEPS = 12; // copies of the tilemap stacked behind it to give blocks depth
 const SLAB_STEP = 1; // px each copy moves up and to the right
 const MAGNET_RANGE = 260;
@@ -82,6 +83,9 @@ export default class GameScene extends Phaser.Scene {
         case 'R':
           this.addRocket(x, (ty + 1) * TILE);
           break;
+        case 'U':
+          this.addPowerCell(x, y);
+          break;
         default:
           if (POWER_BY_CHAR[ch]) this.addPowerUp(x, y, POWER_BY_CHAR[ch]);
       }
@@ -144,6 +148,8 @@ export default class GameScene extends Phaser.Scene {
 
   setupPlayer(player, i) {
     player.index = i;
+    // a big suit carries over from the last level (dying or a new run resets it)
+    if (this.registry.get(`big${i + 1}`)) player.setBig(true);
     player.shadow = this.add.image(player.x, player.y, 'shadow').setDepth(1);
     // floating platforms stop holding the player up for a moment after they press down
     player.layerCollider = this.physics.add.collider(player, this.layer, null,
@@ -326,6 +332,14 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  addPowerCell(x, y) {
+    const item = this.addPickup(x, y, 'cell');
+    if (item.preFX) { // WebGL only
+      item.preFX.setPadding(12);
+      item.preFX.addGlow(0x5fd35f, 4, 0, false, 0.1, 12);
+    }
+  }
+
   // Ground directly below (x, y): the top of the first solid tile, or null over a pit.
   groundBelow(x, y) {
     const tx = Math.floor(x / TILE);
@@ -359,7 +373,7 @@ export default class GameScene extends Phaser.Scene {
   pullPickups(dt) {
     const magnets = this.players.filter((p) => !p.dead && p.hasPower('magnet'));
     for (const item of this.pickups.getChildren()) {
-      if (item.kind === 'power') continue;
+      if (item.kind !== 'star' && item.kind !== 'crystal') continue;
       if (!item.pulled) {
         const p = magnets.find((m) => Phaser.Math.Distance.Between(item.x, item.y, m.x, m.y) <= MAGNET_RANGE);
         if (!p) continue;
@@ -414,6 +428,16 @@ export default class GameScene extends Phaser.Scene {
       this.addScore(POINTS.crystal, item.x, item.y - 20, '#41e0ff', player);
       this.cyanBurst.explode(24, item.x, item.y);
       sfx.crystal();
+    } else if (item.kind === 'cell') {
+      // suit up; already big, it's worth points instead
+      if (player.big) {
+        this.addScore(POINTS.cell, item.x, item.y - 20, '#b8ff9a', player);
+      } else {
+        player.setBig(true);
+        this.popup(item.x, item.y - 30, 'SUIT UP!', '#b8ff9a', 14);
+      }
+      this.greenBurst.explode(24, item.x, item.y);
+      sfx.grow();
     } else {
       const { label, color } = POWERS[item.power];
       const tint = Phaser.Display.Color.HexStringToColor(color).color;
@@ -450,13 +474,29 @@ export default class GameScene extends Phaser.Scene {
       this.cameras.main.shake(80, 0.004);
       sfx.stomp();
     } else if (player.invulnerable <= 0) {
-      if (player.hasPower('shield')) {
-        this.breakShield(player);
-        this.smash(enemy, player);
-      } else {
-        this.killPlayer(player, false);
-      }
+      this.hurtPlayer(player, enemy);
     }
+  }
+
+  // Taking a hit: a shield goes first (and knocks out the enemy that hit
+  // it), then a big suit shrinks back to small; only a small astronaut dies.
+  hurtPlayer(player, enemy = null) {
+    if (player.hasPower('shield')) {
+      this.breakShield(player);
+      if (enemy) this.smash(enemy, player);
+    } else if (player.big) {
+      this.shrinkPlayer(player);
+    } else {
+      this.killPlayer(player, false);
+    }
+  }
+
+  shrinkPlayer(p) {
+    p.setBig(false);
+    p.invulnerable = SHRINK_INVULNERABLE;
+    this.powerBurst.setParticleTint(0xffffff).explode(18, p.x, p.y);
+    this.popup(p.x, p.y - 40, 'SUIT DAMAGED', '#ff6b6b');
+    sfx.shrink();
   }
 
   // A plasma ball flying along the ground.
@@ -480,8 +520,7 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
     this.popShot(shot);
-    if (player.hasPower('shield')) this.breakShield(player);
-    else this.killPlayer(player, false);
+    this.hurtPlayer(player);
   }
 
   updateShots(dt) {
@@ -550,12 +589,8 @@ export default class GameScene extends Phaser.Scene {
     const box = new Phaser.Geom.Rectangle(p.body.x, p.body.y, p.body.width, p.body.height);
 
     if (p.invulnerable <= 0 && !p.hasPower('nova') && this.spikes.some((s) => Phaser.Geom.Intersects.RectangleToRectangle(box, s))) {
-      if (p.hasPower('shield')) {
-        this.breakShield(p);
-      } else {
-        this.killPlayer(p, false);
-        return;
-      }
+      this.hurtPlayer(p);
+      if (p.dead) return;
     }
 
     for (const b of this.beacons) {
@@ -582,6 +617,8 @@ export default class GameScene extends Phaser.Scene {
     music.stop();
     this.cameras.main.stopFollow();
     this.registry.set({ powers: [], powers2: [] });
+    // a big suit carries over to the next level (not for a player who's down)
+    this.players.forEach((p) => this.registry.set(`big${p.index + 1}`, p.big && !p.dead));
     const rocket = this.rocket;
 
     // everyone climbs aboard: whoever is at the rocket hops in through the

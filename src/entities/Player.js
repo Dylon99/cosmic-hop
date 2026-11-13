@@ -10,16 +10,21 @@ const JUMP_BUFFER = 0.12; // seconds a jump press is remembered before landing
 const AIR_JUMP_VELOCITY = -680;
 const SPEED_BOOST = 1.6; // run speed multiplier with hyper speed
 const DROP_TIME = 0.25; // seconds platforms let you fall through after pressing down
+// hitboxes in texture pixels: the big suit (48px frames) and the small one (32px frames)
+const SIZES = { big: { w: 27, h: 42, x: 12, y: 6 }, small: { w: 18, h: 28, x: 8, y: 4 } };
+const SMALL_BUBBLE = 0.7; // shield bubble scale on a small astronaut
 
 export default class Player extends Phaser.Physics.Arcade.Sprite {
   // controls: a scheme from CONTROLS; skin: 'hero' or 'hero2'
   constructor(scene, x, y, { controls = CONTROLS.solo, skin = 'hero' } = {}) {
-    super(scene, x, y, skin, 0);
+    super(scene, x, y, `${skin}-small`, 0);
     this.skin = skin;
+    this.big = false; // everyone starts small; a power cell suits them up
+    this.animName = 'idle';
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(10);
-    this.body.setSize(27, 42).setOffset(12, 6);
+    this.fitBody();
     this.body.setMaxVelocityY(950);
     this.setCollideWorldBounds(true);
 
@@ -45,6 +50,27 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.ghostTimer = 0;
     this.bubble = scene.add.image(x, y, 'bubble').setDepth(11).setVisible(false)
       .setBlendMode(Phaser.BlendModes.ADD);
+  }
+
+  textureKey() {
+    return this.big ? this.skin : `${this.skin}-small`;
+  }
+
+  fitBody() {
+    const s = this.big ? SIZES.big : SIZES.small;
+    this.body.setSize(s.w, s.h).setOffset(s.x, s.y);
+  }
+
+  // Switch between the small and big astronaut, keeping the feet where they are.
+  setBig(big) {
+    if (this.big === big) return;
+    const feet = this.body.bottom;
+    this.big = big;
+    this.setTexture(this.textureKey(), this.frame.name);
+    this.fitBody();
+    this.y = feet - this.body.offset.y - this.body.height + this.displayOriginY;
+    // animations carry their own texture, so switch to this size's set too
+    if (!this.dead) this.anims.play(`${this.textureKey()}-${this.animName}`, true);
   }
 
   hasPower(name) {
@@ -159,8 +185,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.wasOnGround = onGround;
     if (body.blocked.down && this.dropTimer <= 0) this.lastSafe = { x: this.x, y: this.y };
 
-    const anim = !onGround ? (body.velocity.y < 0 ? 'jump' : 'fall') : Math.abs(vx) > 20 ? 'run' : 'idle';
-    this.anims.play(`${this.skin}-${anim}`, true);
+    this.animName = !onGround ? (body.velocity.y < 0 ? 'jump' : 'fall') : Math.abs(vx) > 20 ? 'run' : 'idle';
+    this.anims.play(`${this.textureKey()}-${this.animName}`, true);
 
     if (this.invulnerable > 0) {
       this.invulnerable -= dt;
@@ -185,7 +211,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.bubble.setVisible(shielded);
     if (shielded) {
       const wobble = Math.sin(time / 120) * 0.04;
-      this.bubble.setPosition(this.x, this.y + 2).setScale(1 + wobble, 1 - wobble);
+      const k = this.big ? 1 : SMALL_BUBBLE;
+      this.bubble.setPosition(this.x, this.y + 2 * k).setScale(k * (1 + wobble), k * (1 - wobble));
     }
 
     // supernova cycles through the rainbow and flashes when about to run out
@@ -241,7 +268,9 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.moverCollider.active = false;
   }
 
+  // Back in the game after dying: always as a small astronaut.
   respawn(x, y) {
+    this.setBig(false);
     this.dead = false;
     this.clearTint();
     this.setPosition(x, y);
