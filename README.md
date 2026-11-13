@@ -35,6 +35,7 @@ The game always fills the window. Wider screens show more of the level, and the 
 |---|---|
 | Star | 10 |
 | Energy crystal (3 per level, some hidden up high) | 50 |
+| Power cell while already big | 100 |
 | Stomp an alien (chained stomps double: 100 → 200 → 400 → 800) | 100+ |
 | Reach the rocket | 500 |
 | Time bonus | 5 per second left |
@@ -71,6 +72,12 @@ Every level has its own background track, plus one for the menus. There are no a
 | 6 | Crystal Caverns | a cave ceiling with stalactites that hurt if you jump into them |
 | 7 | Alien Jungle | crowds of enemies, staircases, platforms at two heights |
 | 8 | Event Horizon | everything at once, near a black hole |
+
+## Suiting up
+
+Every astronaut starts small. Grab a green **power cell** (two per level: one near the start, one past the checkpoint) and you suit up into the big astronaut. Getting hit while big knocks you back down to small instead of costing a heart, and you blink for 1.5 seconds while nothing can hurt you; a hit while small costs a heart. Order of protection: shield first, then the big suit, then a heart.
+
+The big suit carries over to the next level. Dying, or starting a new run, makes you small again. A power cell picked up while already big is worth 100 points. In co-op each player has their own size.
 
 ## Super powers
 

@@ -71,6 +71,24 @@ const hero = [
 // player 2: a green suit with a cyan visor, so the two are easy to tell apart
 const hero2 = hero.map((f) => f.map((row) => row.replace(/[WOo]/g, (ch) => ({ W: 'M', O: 'C', o: 'D' })[ch])));
 
+// the power cell (map letter U) that suits a small astronaut up big
+const cell = [[
+  '....KKKK....',
+  '...KSSSsK...',
+  '..KKKKKKKK..',
+  '..KMNNNNnK..',
+  '..KMNNYYnK..',
+  '..KMNYYNnK..',
+  '..KMYYYYnK..',
+  '..KMNNYYnK..',
+  '..KMNYYNnK..',
+  '..KMNYNNnK..',
+  '..KMNNNNnK..',
+  '..KKKKKKKK..',
+  '...KSSSsK...',
+  '....KKKK....',
+]];
+
 // ---------------------------------------------------------------- enemies
 const blob = [
   [
@@ -852,6 +870,10 @@ function addHills(scene, key, { sky, planet }, seed) {
 export function buildTextures(scene, levels) {
   addSheet(scene, 'hero', hero);
   addSheet(scene, 'hero2', hero2);
+  // the small astronauts are the same art drawn at 2x instead of 3x
+  addSheet(scene, 'hero-small', hero, 2);
+  addSheet(scene, 'hero2-small', hero2, 2);
+  addSheet(scene, 'cell', cell, SCALE, { radius: 3, gloss: 0.9 });
   addSheet(scene, 'blob', blob);
   addSheet(scene, 'drone', drone);
   addSheet(scene, 'crawler', crawler);
@@ -911,7 +933,7 @@ export function buildTextures(scene, levels) {
 export function buildAnimations(scene) {
   const a = (key, tex, frames, frameRate, repeat = -1) =>
     scene.anims.create({ key, frames: frames.map((f) => ({ key: tex, frame: f })), frameRate, repeat });
-  for (const skin of ['hero', 'hero2']) {
+  for (const skin of ['hero', 'hero2', 'hero-small', 'hero2-small']) {
     a(`${skin}-idle`, skin, [0, 0, 0, 1], 3);
     a(`${skin}-run`, skin, [2, 3, 4, 5], 12);
     a(`${skin}-jump`, skin, [6], 1);

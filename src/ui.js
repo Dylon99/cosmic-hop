@@ -114,7 +114,7 @@ export const startingLives = (players) => LIVES_PER_PLAYER * players;
 // Score, lives and player count for a fresh run.
 export function resetRun(registry, players = getPlayers()) {
   const lives = startingLives(players);
-  registry.set({ score: 0, score1: 0, score2: 0, lives, maxLives: lives, players });
+  registry.set({ score: 0, score1: 0, score2: 0, lives, maxLives: lives, players, big1: false, big2: false });
 }
 
 export const PLAYER_COLORS = ['#ffd23f', '#b8ff9a'];
