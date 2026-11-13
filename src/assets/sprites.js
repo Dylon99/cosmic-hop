@@ -468,34 +468,64 @@ const spike = [[
   'KKKKKKKKKKKKKKKK',
 ]];
 
+// Two round portholes are see-through holes: the scene puts dark glass and
+// the pilots' helmets behind them (player 1 on top, player 2 below).
 const rocketBody = [
-  '.......KK.......',
-  '......KRRK......',
-  '.....KRRRrK.....',
-  '.....KRRRrK.....',
-  '....KWWWWWwK....',
-  '....KWWWWWwK....',
-  '....KWKKKWwK....',
-  '....KWKCDKwK....',
-  '....KWKCCKwK....',
-  '....KWKKKWwK....',
-  '....KWWWWWwK....',
-  '....KWWWWWwK....',
-  '....KRRRRRrK....',
-  '....KWWWWWwK....',
-  '...KKWWWWWwKK...',
-  '..KRKWWWWWwKRK..',
-  '.KRRKWWWWWwKRrK.',
-  '.KRRKWWWWWwKRrK.',
-  '.KRRKKKKKKKKRrK.',
-  '.KKK.KGGGGK.KKK.',
-  '......KKKK......',
+  '...........KK...........',
+  '..........KRRK..........',
+  '.........KRRRrK.........',
+  '........KRRRRRrK........',
+  '.......KRRRRRRRrK.......',
+  '......KRRRRRRRRRrK......',
+  '.....KSSSSSSSSSSSsK.....',
+  '.....KWWWWWWWWWWWwK.....',
+  '.....KWWWSSSSSSWWwK.....',
+  '.....KWWSS....SSWwK.....',
+  '.....KWSS......SSwK.....',
+  '.....KWS........SwK.....',
+  '.....KWS........SwK.....',
+  '.....KWS........SwK.....',
+  '.....KWS........SwK.....',
+  '.....KWSS......SSwK.....',
+  '.....KWWSS....SSWwK.....',
+  '.....KWWWSSSSSSWWwK.....',
+  '.....KWWWWWWWWWWWwK.....',
+  '.....KRRRRRRRRRRRrK.....',
+  '.....KWWWWWWWWWWWwK.....',
+  '.....KWWWSSSSSSWWwK.....',
+  '.....KWWSS....SSWwK.....',
+  '.....KWSS......SSwK.....',
+  '.....KWS........SwK.....',
+  '.....KWS........SwK.....',
+  '.....KWS........SwK.....',
+  '.....KWS........SwK.....',
+  '....KKWSS......SSwKK....',
+  '...KRKWWSS....SSWwKrK...',
+  '..KRRKWWWSSSSSSWWwKRrK..',
+  '.KRRRKWWWWWWWWWWWwKRRrK.',
+  'KRRRRKRRRRRRRRRRRrKRRRrK',
+  'KRRRRKWWWWWWWWWWWwKRRRrK',
+  'KRRRRKKKKKKKKKKKKKKRRRrK',
+  'KRRRK...KGGGGGGK...KRRrK',
+  'KKKK.....KKKKKK.....KKKK',
 ];
+const noFlame = ['........................', '........................', '........................', '........................'];
 const rocket = [
-  [...rocketBody, '................', '................', '................'],
-  [...rocketBody, '......YLLY......', '.......YY.......', '.......RR.......'],
-  [...rocketBody, '.....YLLLLY.....', '......YLLY......', '......RYYR......'],
+  [...rocketBody, ...noFlame],
+  [...rocketBody, '.........YLLLLY.........', '..........YLLY..........', '...........RR...........', '........................'],
+  [...rocketBody, '........YLLLLLLY........', '.........YLLLLY.........', '..........YLLY..........', '..........RYYR..........'],
 ];
+// where things sit on the rocket sheet, in art pixels
+export const ROCKET = {
+  rows: rocketBody.length + noFlame.length, // the sheet's height
+  ground: rocketBody.length, // the bottom of the fins
+  windows: [13, 26], // centre rows of the portholes
+};
+// behind a porthole: dark glass, then a glint drawn over the pilot
+const windowGlass = [Array.from({ length: 8 }, (_, y) => (y < 3 ? 'bbbbbbbb' : 'BBBBBBBB'))];
+const windowGlint = [['........', '...DD...', '..DD....', '.D......', '.D......', '........', '........', '........']];
+// a pilot is the hero's helmet and shoulders
+const pilot = (frames) => [frames[0].slice(1, 11)];
 
 const beaconGrid = (X, x) => [
   '................',
@@ -836,6 +866,10 @@ export function buildTextures(scene, levels) {
   addSheet(scene, 'lava', lava, SCALE, false);
   addSheet(scene, 'mover', mover, SCALE, { open: 'trbl', radius: 2 });
   addSheet(scene, 'rocket', rocket);
+  addSheet(scene, 'window-glass', windowGlass, SCALE, false);
+  addSheet(scene, 'window-glint', windowGlint, SCALE, false);
+  addSheet(scene, 'pilot', pilot(hero), 2);
+  addSheet(scene, 'pilot2', pilot(hero2), 2);
   addSheet(scene, 'beacon', beacon);
   // ground is one continuous lumpy surface rounded only along its top;
   // platforms and hull panels are separate slabs

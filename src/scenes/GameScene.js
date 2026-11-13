@@ -1,5 +1,5 @@
 import { LEVELS } from '../levels.js';
-import { TILE, TILE_INDEX, groundTiles } from '../assets/sprites.js';
+import { TILE, TILE_INDEX, SCALE, ROCKET, groundTiles } from '../assets/sprites.js';
 import { sfx } from '../assets/sounds.js';
 import { music } from '../assets/music.js';
 import { text, addBackdrop, updateBackdrop, PLAYER_COLORS } from '../ui.js';
@@ -80,8 +80,7 @@ export default class GameScene extends Phaser.Scene {
           this.beacons.push(this.add.sprite(x, y, 'beacon', 0).setDepth(3));
           break;
         case 'R':
-          this.rocket = this.add.sprite(x, (ty + 1) * TILE, 'rocket', 0).setOrigin(0.5, 1).setDepth(6);
-          this.rocketZone = new Phaser.Geom.Rectangle(x - 24, (ty + 1) * TILE - 60, 48, 60);
+          this.addRocket(x, (ty + 1) * TILE);
           break;
         default:
           if (POWER_BY_CHAR[ch]) this.addPowerUp(x, y, POWER_BY_CHAR[ch]);
@@ -126,6 +125,21 @@ export default class GameScene extends Phaser.Scene {
       stars: 0, starsTotal: stars, crystals: 0, crystalsTotal: crystals, powers: [], powers2: [],
     });
     this.scene.launch('HUD');
+  }
+
+  // The rocket stands on its fins at (x, groundY). Each porthole is a hole in
+  // the sprite with glass, a hidden pilot and a glint layered behind and on top.
+  addRocket(x, groundY) {
+    this.rocket = this.add.sprite(x, groundY, 'rocket', 0).setOrigin(0.5, ROCKET.ground / ROCKET.rows).setDepth(6);
+    this.rocketZone = new Phaser.Geom.Rectangle(x - 30, groundY - 72, 60, 72);
+    this.portholes = ROCKET.windows.map((row, i) => {
+      const y = groundY - (ROCKET.ground - row) * SCALE;
+      return {
+        glass: this.add.image(x, y, 'window-glass').setDepth(5.8),
+        pilot: this.add.image(x, y + 3, i ? 'pilot2' : 'pilot').setDepth(5.9).setVisible(false),
+        glint: this.add.image(x, y, 'window-glint').setDepth(6.1).setAlpha(0.6),
+      };
+    });
   }
 
   setupPlayer(player, i) {
@@ -566,22 +580,45 @@ export default class GameScene extends Phaser.Scene {
       this.popup(player.x, player.y - 50, `P${player.index + 1} FIRST! +${POINTS.clear}`, PLAYER_COLORS[player.index], 14);
     }
     music.stop();
+    this.cameras.main.stopFollow();
+    this.registry.set({ powers: [], powers2: [] });
+    const rocket = this.rocket;
+
+    // everyone climbs aboard: whoever is at the rocket hops in through the
+    // hatch, a partner elsewhere (or waiting to respawn) beams in. Then each
+    // one's helmet pops up in their porthole.
     for (const p of this.players) {
       p.clearPowers();
       p.body.enable = false;
-      p.setVisible(false);
       p.shadow.setVisible(false);
       p.tag?.setVisible(false);
+      if (p.dead || !p.visible) {
+        p.setVisible(false);
+      } else if (p === player) {
+        this.tweens.add({ targets: p, x: rocket.x, y: rocket.y - 30, scale: 0.4, alpha: 0, duration: 260, ease: 'Quad.easeIn' });
+      } else {
+        this.cyanBurst.explode(16, p.x, p.y);
+        this.tweens.add({ targets: p, alpha: 0, scaleX: 0.2, scaleY: 1.6, duration: 220, onComplete: () => p.setVisible(false) });
+      }
+      const { pilot } = this.portholes[p.index ?? 0];
+      this.time.delayedCall(280, () => {
+        pilot.setVisible(true).setScale(0.4);
+        this.tweens.add({ targets: pilot, scale: 1, duration: 260, ease: 'Back.easeOut' });
+        sfx.checkpoint();
+      });
     }
-    this.registry.set({ powers: [], powers2: [] });
-    sfx.launch();
-    this.rocket.play('rocket-fire');
-    this.cameras.main.stopFollow();
-    this.cameras.main.shake(1800, 0.004);
-    this.exhaust.startFollow(this.rocket, 0, -4);
-    this.exhaust.start();
-    this.tweens.add({ targets: this.rocket, y: this.rocket.y - 750, duration: 1700, delay: 300, ease: 'Cubic.easeIn' });
-    this.time.delayedCall(2300, () => this.completeLevel());
+
+    // ignition, then lift-off with the pilots in their windows
+    const parts = [rocket, ...this.portholes.flatMap((w) => [w.glass, w.pilot, w.glint])];
+    this.time.delayedCall(650, () => {
+      sfx.launch();
+      rocket.play('rocket-fire');
+      this.cameras.main.shake(1900, 0.004);
+      this.exhaust.startFollow(rocket, 0, 6);
+      this.exhaust.start();
+      this.tweens.add({ targets: parts, y: '-=900', duration: 1800, delay: 300, ease: 'Cubic.easeIn' });
+    });
+    this.time.delayedCall(2900, () => this.completeLevel());
   }
 
   completeLevel() {
